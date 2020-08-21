@@ -1,0 +1,403 @@
+<style>
+	#output{
+		padding:2px;
+		width:796px;
+		height:200px;
+		overflow-y:scroll;
+		background-color:black;
+		color:white;
+		font-family: Consolas, monaco, monospace;
+	}
+	#input{
+		width:800px
+	}
+</style>
+
+<canvas id="canvas" width="800" height="600">Nice web browser</canvas><br>
+<div id="output">Welcome to Four Hour TD! The game is controlled here. Type help for help or start to start.<br></div><br>
+<input id="input" >
+<script>
+	let canvas = document.getElementById('canvas');
+	let ctx = canvas.getContext('2d');
+	let input = document.getElementById('input');
+	let output = document.getElementById('output');
+	let history = [];
+	let grid = true;
+	let towers = [
+		{
+			cost:200,
+			name:"Shooter",
+			color:"blue",
+			dmg:20,
+			size:5,
+			fireRate:40,
+
+		},
+		{
+			cost:450,
+			name:"Double Shooter",
+			color:"orange",
+			dmg:20,
+			size:5,
+			fireRate:20,
+
+		},
+		{
+			cost: 900,
+			name:"Biggus",
+			color:"pink",
+			dmg:40,
+			size:10,
+			fireRate: 60
+
+		},
+		{
+			cost:1500,
+			name:"Mega Biggus",
+			color:"yellow",
+			dmg:40,
+			size:12,
+			fireRate:40
+
+		},
+		{
+			cost:3000,
+			name:"Master Blaster",
+			color:"purple",
+			dmg:40,
+			size:15,
+			fireRate:20
+
+		},
+	];
+	let enems = [
+		{
+			speed:10,
+			health:100,
+			size:10,
+			color:"red",
+		},
+		{
+			speed:7,
+			health:200,
+			size:20,
+			color:"orange",
+		},
+		{
+			speed:15,
+			health:50,
+			size:5,
+			color:"purple",
+		},
+		{
+			speed:10,
+			health:500,
+			size:15,
+			color:"pink",
+		},
+		{
+			speed:8,
+			health:2000,
+			size:25,
+			color:"green",
+		},
+	];
+	let rounds = [[0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,1,0,0,0,0,0,1,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,1,2,1,1,0,1,0,1,1,2,1,0,1],[1,1,2,2,2,3,2,3,1,2,2,1,3,1],[2,2,2,2,2,3,2,3,2,2,2,2,3,2],[2,2,2,2,2,2,2,2,2,2,2,2,2,2],[3,3,3,3,3,3,3,3,3,3,2,2,2,2],[4,3,4,1,3,0,3,3,3,3,2,2,2,2],[4,3,4,3,3,3,3,3,3,3,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,4,4]];
+
+	input.focus();
+	input.addEventListener("keyup",function (e){
+		if(e.key === "ArrowUp"){
+			if(this.value === "" && history.length > 0) this.value = history[history.length-1];
+			else if(history.indexOf(this.value) > 0) this.value = history[history.indexOf(this.value)-1];
+		}
+		if(e.key === "Enter"){
+			command(this.value);
+			history.push(this.value);
+			this.value = "";
+		};
+	});
+	output.addEventListener("click",()=>input.focus());
+	canvas.addEventListener("click",()=>input.focus());
+	let command = (input) => {
+		output.innerHTML += input + "<br>";
+		input = input.toLowerCase();
+		input = input.split(" ");
+		if(!commands[input[0]]){
+			output.innerHTML += "Command not found!<br>";
+			output.scrollTo(0,output.scrollHeight);
+			return;
+		};
+		commands[input[0]](input);
+		output.scrollTo(0,output.scrollHeight);
+	};
+	let update = () =>{
+		if(game.going) {
+			if(game.lastSend+40<=game.frame){
+				if(game.roundPos < rounds[game.round].length){
+					game.lastSend = game.frame;
+					game.enemies.push(new Enemy(rounds[game.round][game.roundPos]));
+					game.roundPos++;
+				} else {
+					game.roundPos = 0;
+					game.round++;
+					game.going = false;
+					game.money += 100* game.round;
+					output.innerHTML += "Round finished.<br>";
+				}
+			}
+		}
+		for(i=0;i<game.towers.length;i++){
+			t = game.towers[i];
+			if(t.lastShot+40 < game.frame && game.enemies.length !== 0){
+				//begin shooting
+				let target = findTarget(t.x,t.y);
+				game.projectiles.push(new Projectile(t.x+10-t.bulletSize/2,t.y+10-t.bulletSize/2,t.dmg,t.bulletSize,target.xAdjuster,target.yAdjuster));
+				t.lastShot = game.frame;
+			}
+
+		}
+		for(i=0;i<game.projectiles.length;i++){
+			let p = game.projectiles[i];
+			p.x += p.plusX;
+			p.y += p.plusY;
+			for(j=0;j<game.enemies.length;j++){
+				e = game.enemies[j];
+				if(p.x+20>e.x && p.x < e.x +10 && p.y+20>e.y && p.y < e.y +e.size){
+					p.size--;
+					e.health -= p.dmg;
+					if(p.size <= 0){
+						game.projectiles.splice(i,1);
+						i++;
+					}
+					if(e.health <= 0){
+						game.enemies.splice(j,1);
+						j++;
+						game.money += 5;
+					}
+				}
+			}
+			if(p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height + p.size){
+				game.projectiles.splice(i,1);
+				i++;
+			}
+			
+		}
+		for(i=0;i<game.enemies.length;i++){
+			game.enemies[i].x += game.enemies[i].speed/10;
+			if(game.enemies[i].x > 600){
+				game.health--;
+				if(game.health <= 0){
+					game = new Game();
+					output.innerHTML +="Game over! Resetting!<br>";
+					output.scrollTo(0,output.scrollHeight);
+					return;
+				}
+				game.enemies.splice(i,1);
+				i++
+			}
+		}
+		if(game.round === rounds.length && game.enemies.length === 0){
+			game = new Game();
+			output.innerHTML +="You win! Resetting!<br>";
+			output.scrollTo(0,output.scrollHeight);
+			return;
+		}
+		game.frame++
+		render();
+	};
+	let render = () =>{
+		ctx.clearRect(0,0,canvas.width,canvas.length);
+		ctx.fillStyle = "#8B4513";
+		ctx.fillRect(0,0,canvas.width,canvas.height);
+		ctx.fillStyle = "green";
+		ctx.fillRect(40,40,560,560);
+		ctx.fillStyle = "#c9b24f";
+		ctx.fillRect(40,560/2,560,60);
+		for(x in game.enemies){
+			ctx.fillStyle = game.enemies[x].color;
+			ctx.fillRect(game.enemies[x].x,game.enemies[x].y, 10, game.enemies[x].size);
+		}
+		for(x in game.towers){
+			ctx.fillStyle = game.towers[x].color;
+			ctx.fillRect(game.towers[x].x,game.towers[x].y, 20, 20);
+		}
+		for(x in game.projectiles){
+			ctx.fillStyle = "black";
+			ctx.fillRect(game.projectiles[x].x,game.projectiles[x].y,game.projectiles[x].size,game.projectiles[x].size);
+
+		}
+		ctx.fillStyle = "#8B4513";
+		ctx.fillRect(600,0,200,600);
+		ctx.fillRect(0,0,40,600);
+
+		if(grid){
+			ctx.fillStyle = "black";
+			ctx.font = "12px sans serif";
+			for(x = 0; x <= 560; x+= 20){
+				if(x != 0) ctx.fillText(x/20,x+23,25);
+				ctx.fillRect(x+40,0,1,canvas.height);
+
+			};
+			for(y = 0; y <= 560; y+= 20){
+				if(y!=0) ctx.fillText(y/20,15,y+38);
+				ctx.fillRect(0,y+40,canvas.width-200,1);
+
+			};
+		}
+		ctx.fillStyle = "black";
+		ctx.font = "25px sans serif";
+		ctx.fillText(`Money: $${game.money}`,600+5,30);
+		ctx.fillText(`Lives: ${game.health}`,600+35,60);
+		ctx.font = "40px sans serif";
+		ctx.fillText("Towers",600+25,120);
+		ctx.font = "20px sans serif";
+		for(i=0;i<towers.length;i++){
+			ctx.fillStyle = "black";
+			ctx.fillText(i+1,620,175+90*i);
+			ctx.fillText("$" + towers[i].cost,725,175+90*i);
+			ctx.fillStyle = towers[i].color;
+			ctx.fillRect(660,145+90*i,50,50);
+
+		}
+		ctx.fillStyle = "black";
+		ctx.font = "25px sans serif";
+		ctx.fillText(`${game.round}/${rounds.length} complete`, 610,585);
+
+
+
+			//ctx.fontStyle = "30px Consolas";
+	};
+	let interval = setInterval(()=>{if(game) update()},1000/60);
+	let commands = {
+		help:()=>output.innerHTML += `start - starts rounds<br>
+			reset - restarts the game<br>
+			grid [on/off] - turns grid on or off<br>
+				example: grid on<br>
+			buy [tower id] [x] [y] - buy a tower<br>
+				example: buy 1 20 18`,
+		start:()=>{
+			if(!game.going && game.round !== rounds.length){
+				game.going = true;
+				output.innerHTML += "Started round!<br>";
+			}
+
+		},
+		reset:()=>{
+			if(game){
+				game = new Game();
+				output.innerHTML += "Resetting!<br>";
+			}
+		},
+		grid:(opt)=>{
+			if(opt[1]){
+				if(opt[1] === "on") grid = true;
+				else if(opt[1] === "off") grid = false;
+				else grid = !grid;
+			} 
+			else grid = !grid;
+			output.innerHTML += `Grid ${grid?"on":"off"}!<br>`;
+		},
+		buy:(opt)=>{
+			if(opt[1] && opt[2] && opt[3] && opt[1] >= 0 && opt[1]-1 < towers.length && opt[2] > 0 && opt[2] <= 28 && opt[3] > 0 && opt[3] <= 28){
+				if(game.money >= towers[opt[1]-1].cost){
+					if(isSafe(opt[2],opt[3])){
+						game.towers.push(new Tower(opt[1]-1,(opt[2]-1) * 20 + 40, (opt[3]-1) * 20 + 40));
+						game.money -= towers[opt[1]-1].cost;
+						output.innerHTML += `Bought a ${towers[opt[1]-1].name} at ${opt[2]},${opt[3]}<br>`;
+					} else {
+						output.innerHTML += "Invalid location.<br>";
+					}
+				} else {
+					output.innerHTML += "You cannot afford that!<br>";
+				}
+
+			} else {
+				output.innerHTML += "Invalid command.<br>";
+			}
+		},
+
+
+
+
+	};
+	let findTarget = (x,y)=>{
+		let closest = 600000;
+		let closestIndex = 0;
+		for(i=0;i< game.enemies.length;i++){
+			currentDist = dist({x,y},game.enemies[i]);
+			if(currentDist < closest) {
+				closest = currentDist;
+				closestIndex = i;
+			}
+		}
+		let enemX = game.enemies[closestIndex].x;
+		let enemY = game.enemies[closestIndex].y;
+		let adjustance = closest/5;
+		enemX += (dist({x:enemX + adjustance * (game.enemies[closestIndex].speed/10),y:enemY},{x,y})/5)  * (game.enemies[closestIndex].speed/10) + 5;
+		let yDiff = Math.abs(enemY - y);
+		let xDiff = Math.abs(enemX - x);
+		let speedScaler = yDiff/(yDiff+xDiff);
+		let yAdjuster = 5 * speedScaler;
+		let xAdjuster = 5 - yAdjuster;
+		if(x > enemX) xAdjuster*=-1;
+		if(y > enemY) yAdjuster*=-1;
+		return {xAdjuster,yAdjuster};
+	};
+	let dist = (obj1, obj2) => {
+		return Math.abs(Math.sqrt(Math.pow(obj1.x-obj2.x,2)+Math.pow(obj1.y-obj2.y,2) ));
+	}
+	let isSafe = (x,y) => {
+		if(y >= 13 && y <= 15) return false; //the path
+		x = (x-1) *20 +40;
+		y = (y-1) *20 +40;
+		for(i in game.towers){
+			if(game.towers[i].x === x && game.towers[i].y === y){
+				return false;
+			}
+		}
+		return true;
+	};
+	let Game = function(){
+		this.money = 1000;
+		this.health = 30;
+		this.towers = [];
+		this.enemies = [];
+		this.projectiles = [];
+		this.round = 0;
+		this.roundPos = 0;
+		this.going = false;
+		this.frame = 0;
+		this.lastSend = -40;
+
+	};
+	let Enemy = function(index){
+		this.color = enems[index].color;
+		this.health = enems[index].health;
+		this.speed = enems[index].speed;
+		this.size = enems[index].size;
+		this.x = 0-this.size;
+		this.y = 280 + Math.floor(Math.random()*(60-this.size));
+
+	}
+	let Tower = function(index,x,y){
+		this.x = x;
+	       	this.y = y;
+		this.cost = towers[index].cost;
+		this.color = towers[index].color;
+		this.fireRate = towers[index].fireRate;
+		this.dmg = towers[index].dmg;
+		this.bulletSize = towers[index].size;
+		this.lastShot = 0;
+	}
+	let Projectile = function(x,y,dmg,size,plusX,plusY){
+		this.x = x;
+		this.y = y;
+		this.dmg = dmg;
+		this.size = size;
+		this.plusX = plusX;
+		this.plusY = plusY;
+
+	}
+	let game = new Game();
+
+</script>
