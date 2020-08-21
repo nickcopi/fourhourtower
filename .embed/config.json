@@ -4,7 +4,7 @@
 	"description":"A command line controlled tower defense game made in about 4 hours for Ludum Dare 41, theme \"Combine two incompatible genres.\"",
 	"embed":{
 		"width":820,
-		"height":1000,
+		"height":880,
 		"file":"LD41.html"
 	}
 }
